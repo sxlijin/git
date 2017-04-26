@@ -138,6 +138,8 @@ void diff_debug_queue(const char *, struct diff_queue_struct *);
 #define diff_debug_queue(a,b) do { /* nothing */ } while (0)
 #endif
 
+extern void diffcore_count_single(struct diff_filespec *f,
+				  void **count_p);
 extern int diffcore_count_changes(struct diff_filespec *src,
 				  struct diff_filespec *dst,
 				  void **src_count_p,

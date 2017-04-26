@@ -441,6 +441,29 @@ static int find_renames(struct diff_score *mx, int dst_cnt, int minimum_score, i
 	return count;
 }
 
+struct load_cnt_data_thread_params {
+	int src, dst;
+};
+
+static void threaded_load_cnt_data(struct load_cnt_data_thread_params *p) {
+	struct diff_filespec *f;
+
+	if (p->dst == -1) {
+		// load cnt_data for a diff_rename_src
+		f = rename_src[p->src].p->one;
+	}
+	else {
+		// load cnt_data for a diff_rename_dst
+		f = rename_dst[p->dst].two;
+	}
+
+	// what to do with the values returned by these methods?
+	diff_populate_filespec(f, CHECK_SIZE_ONLY);
+	diff_populate_filespec(f, 0);
+	diffcore_count_single(f, &f->cnt_data);
+	diff_free_filespec_blob(f);
+}
+
 void diffcore_rename(struct diff_options *options)
 {
 	int detect_rename = options->detect_rename;
@@ -539,6 +562,36 @@ void diffcore_rename(struct diff_options *options)
 
 	mx = xcalloc(st_mult(rename_src_nr, num_create), sizeof(*mx));
 
+	for (i = 0; i < rename_src_nr; i++) {
+		struct load_cnt_data_thread_params p;
+
+		p.src = i;
+		p.dst = -1;
+
+		threaded_load_cnt_data(&p);
+	}
+
+	for (i = 0; i < rename_dst_nr; i++) {
+		struct load_cnt_data_thread_params p;
+
+		p.src = -1;
+		p.dst = i;
+
+		threaded_load_cnt_data(&p);
+	}
+
+	// this pre-loads all the information that estimate_similarity has
+	// historically lazy-loaded
+	//
+	// for every src and dst diff_filespec,
+	//      diff_populate_filespec()
+	// for every src and dst diff_filespec,
+	//      diffcore-delta.c:hash_chars()
+	// for every src and dst diff_filespec,
+	//      diff_free_filespec_blob()
+	//
+	// and now there's no need to lock the filespecs when we thread the calls
+	// to estimate_similarity()
 	for (dst_cnt = i = 0; i < rename_dst_nr; i++) {
 		struct diff_filespec *two = rename_dst[i].two;
 		struct diff_score *m;
