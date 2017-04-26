@@ -560,8 +560,6 @@ void diffcore_rename(struct diff_options *options)
 				rename_dst_nr * rename_src_nr, 50, 1);
 	}
 
-	mx = xcalloc(st_mult(rename_src_nr, num_create), sizeof(*mx));
-
 	for (i = 0; i < rename_src_nr; i++) {
 		struct load_cnt_data_thread_params p;
 
@@ -579,6 +577,8 @@ void diffcore_rename(struct diff_options *options)
 
 		threaded_load_cnt_data(&p);
 	}
+
+	mx = xcalloc(st_mult(rename_src_nr, num_create), sizeof(*mx));
 
 	// this pre-loads all the information that estimate_similarity has
 	// historically lazy-loaded
