@@ -560,20 +560,17 @@ void diffcore_rename(struct diff_options *options)
 				rename_dst_nr * rename_src_nr, 50, 1);
 	}
 
-	for (i = 0; i < rename_src_nr; i++) {
+	for (i = 0; i < rename_src_nr + rename_dst_nr; i++) {
 		struct load_cnt_data_thread_params p;
 
-		p.src = i;
-		p.dst = -1;
-
-		threaded_load_cnt_data(&p);
-	}
-
-	for (i = 0; i < rename_dst_nr; i++) {
-		struct load_cnt_data_thread_params p;
-
-		p.src = -1;
-		p.dst = i;
+		if (i < rename_src_nr) {
+			p.src = i;
+			p.dst = -1;
+		}
+		else {
+			p.src = -1;
+			p.dst = i - rename_src_nr;
+		}
 
 		threaded_load_cnt_data(&p);
 	}
