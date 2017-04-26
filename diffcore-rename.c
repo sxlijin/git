@@ -458,10 +458,10 @@ static void threaded_load_cnt_data(struct load_cnt_data_thread_params *p) {
 	}
 
 	// what to do with the values returned by these methods?
-	diff_populate_filespec(f, CHECK_SIZE_ONLY);
-	diff_populate_filespec(f, 0);
-	diffcore_count_single(f, &f->cnt_data);
-	diff_free_filespec_blob(f);
+	if (!f->cnt_data)
+		diff_populate_filespec(f, 0);
+	if (!f->cnt_data)
+		diffcore_count_single(f, &f->cnt_data);
 }
 
 void diffcore_rename(struct diff_options *options)
@@ -563,13 +563,22 @@ void diffcore_rename(struct diff_options *options)
 	for (i = 0; i < rename_src_nr + rename_dst_nr; i++) {
 		struct load_cnt_data_thread_params p;
 
-		if (i < rename_src_nr) {
+		if (i < rename_src_nr) { // breaks t5000-#55
 			p.src = i;
 			p.dst = -1;
+
+			if (skip_unmodified &&
+			    diff_unmodified_pair(rename_src[p.src].p))
+				continue;
+
+			diff_populate_filespec(rename_src[p.src].p->one, 0);
 		}
-		else {
+		else { // breaks t5000-#52
 			p.src = -1;
 			p.dst = i - rename_src_nr;
+
+			if (rename_dst[p.dst].pair)
+				continue;
 		}
 
 		threaded_load_cnt_data(&p);
