@@ -653,7 +653,7 @@ void diffcore_rename(struct diff_options *options)
 	}
 
 	free(rename_thread_pool);
-	free(rename_thread_done);
+	free((void *) rename_thread_done);
 	free(rename_thread_args);
 #endif
 
