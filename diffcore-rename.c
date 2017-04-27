@@ -602,6 +602,7 @@ void diffcore_rename(struct diff_options *options)
 
 #ifndef NO_PTHREADS
 			while (1) {
+				int t_orig = t;
 				if (rename_thread_done[t]) {
 					// if thread claims to be done, wait for it to clean up
 					if (rename_thread_done[t] > 0) {
@@ -616,7 +617,8 @@ void diffcore_rename(struct diff_options *options)
 				}
 				else {
 					t = (t + 1) % rename_thread_nr;
-					// maybe pthread_yield() here every rename_thread_nr iterations
+					if (t_orig == t)
+						sched_yield();
 				}
 			}
 
