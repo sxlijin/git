@@ -571,7 +571,6 @@ void diffcore_rename(struct diff_options *options)
 			diff_free_filespec_blob(two);
 		}
 		dst_cnt++;
-		display_progress(progress, (i+1)*rename_src_nr);
 	}
 	stop_progress(&progress);
 
