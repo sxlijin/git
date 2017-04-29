@@ -577,27 +577,33 @@ void diffcore_rename(struct diff_options *options)
 	struct diff_score *m;
 	//int i, j;
 
-	for (; p->i < p->dst_cnt; p->i++) {
-		p->j = 0;
-		for (; p->j < rename_src_nr; p->j++) {
-			j = p->j;
-			i = (p->i + j) % p->dst_cnt;
-			m = &p->mx[i * rename_src_nr + j];
-
-			if (m->dst == -1)
-				continue;
-
-			one = rename_src[m->src].p->one;
-			two = rename_dst[m->dst].two;
-
-			m->score = estimate_similarity(one, two, minimum_score);
-			m->name_score = basename_same(one, two);
-
-			// Once we run estimate_similarity,
-			// We do not need the text anymore.
-			diff_free_filespec_blob(one);
-			diff_free_filespec_blob(two);
+	while (1) {
+		if (p->j == rename_src_nr) {
+			p->i++;
+			if (p->i == p->dst_cnt)
+				break;
+			p->j = 0;
 		}
+
+		j = p->j;
+		i = (p->i + j) % p->dst_cnt;
+		m = &p->mx[i * rename_src_nr + j];
+
+		p->j++;
+
+		if (m->dst == -1)
+			continue;
+
+		one = rename_src[m->src].p->one;
+		two = rename_dst[m->dst].two;
+
+		m->score = estimate_similarity(one, two, minimum_score);
+		m->name_score = basename_same(one, two);
+
+		// Once we run estimate_similarity,
+		// We do not need the text anymore.
+		diff_free_filespec_blob(one);
+		diff_free_filespec_blob(two);
 	}
 
 	stop_progress(&progress);
