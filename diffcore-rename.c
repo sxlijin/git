@@ -442,6 +442,7 @@ static int find_renames(struct diff_score *mx, int dst_cnt, int minimum_score, i
 }
 
 struct calc_diff_score_thread_params {
+	pthread_mutex_t mutex;
 	struct diff_score *mx;
 	int i, j, dst_cnt, minimum_score;
 };
@@ -452,6 +453,7 @@ void threaded_calc_diff_scores(struct calc_diff_score_thread_params *p) {
 	int i, j;
 
 	while (1) {
+		pthread_mutex_lock(&p->mutex);
 		if (p->j == rename_src_nr) {
 			p->i++;
 			if (p->i == p->dst_cnt)
@@ -465,11 +467,18 @@ void threaded_calc_diff_scores(struct calc_diff_score_thread_params *p) {
 
 		p->j++;
 
+		// want to put this after the continue but then you have an issue of
+		// re-acquiring p->mutex
+		pthread_mutex_unlock(&p->mutex);
+
 		if (m->dst == -1)
 			continue;
 
 		one = rename_src[m->src].p->one;
 		two = rename_dst[m->dst].two;
+
+		pthread_mutex_lock(&one->mutex);
+		pthread_mutex_lock(&two->mutex);
 
 		m->score = estimate_similarity(one, two, p->minimum_score);
 		m->name_score = basename_same(one, two);
@@ -478,6 +487,9 @@ void threaded_calc_diff_scores(struct calc_diff_score_thread_params *p) {
 		// We do not need the text anymore.
 		diff_free_filespec_blob(one);
 		diff_free_filespec_blob(two);
+
+		pthread_mutex_unlock(&one->mutex);
+		pthread_mutex_unlock(&two->mutex);
 	}
 }
 
@@ -599,8 +611,15 @@ void diffcore_rename(struct diff_options *options)
 		dst_cnt++;
 	}
 
+	for (i = 0; i < rename_src_nr; i++)
+		pthread_mutex_init(&rename_src[i].p->one->mutex, NULL);
+
+	for (i = 0; i < rename_dst_nr; i++)
+		pthread_mutex_init(&rename_dst[i].two->mutex, NULL);
+
 	struct calc_diff_score_thread_params params;
 
+	pthread_mutex_init(&params.mutex, NULL);
 	params.mx = mx;
 	params.i = 0;
 	params.j = 0;
