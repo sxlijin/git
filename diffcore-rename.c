@@ -539,39 +539,54 @@ void diffcore_rename(struct diff_options *options)
 
 	mx = xcalloc(st_mult(rename_src_nr, num_create), sizeof(*mx));
 	for (dst_cnt = i = 0; i < rename_dst_nr; i++) {
-		struct diff_filespec *two = rename_dst[i].two;
 		struct diff_score *m;
 
 		if (rename_dst[i].pair)
 			continue; /* dealt with exact match already. */
 
 		m = &mx[dst_cnt * rename_src_nr];
-		for (j = 0; j < rename_src_nr; j++)
-			m[j].dst = -1;
 
 		for (j = 0; j < rename_src_nr; j++) {
-			struct diff_filespec *one = rename_src[j].p->one;
-			struct diff_score this_src;
+			m[j].dst = -1;
 
 			if (skip_unmodified &&
 			    diff_unmodified_pair(rename_src[j].p))
 				continue;
 
-			this_src.score = estimate_similarity(one, two,
-							     minimum_score);
-			this_src.name_score = basename_same(one, two);
-			this_src.dst = i;
-			this_src.src = j;
-			m[j] = this_src;
-			/*
-			 * Once we run estimate_similarity,
-			 * We do not need the text anymore.
-			 */
-			diff_free_filespec_blob(one);
-			diff_free_filespec_blob(two);
+			m[j].dst = i;
+			m[j].src = j;
 		}
 		dst_cnt++;
 	}
+
+	struct diff_filespec *one, *two;
+	struct diff_score *m;
+
+	for (dst_cnt = i = 0; i < rename_dst_nr; i++) {
+		if (rename_dst[i].pair)
+			continue;
+
+		for (j = 0; j < rename_src_nr; j++) {
+			m = &mx[dst_cnt * rename_src_nr + j];
+
+			if (m->dst == -1)
+				continue;
+
+			one = rename_src[j].p->one;
+			two = rename_dst[i].two;
+
+			m->score = estimate_similarity(one, two, minimum_score);
+			m->name_score = basename_same(one, two);
+
+			// Once we run estimate_similarity,
+			// We do not need the text anymore.
+			diff_free_filespec_blob(one);
+			diff_free_filespec_blob(two);
+		}
+
+		dst_cnt++;
+	}
+
 	stop_progress(&progress);
 
 	/* cost matrix sorted by most to least similar pair */
