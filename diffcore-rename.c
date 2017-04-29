@@ -562,18 +562,15 @@ void diffcore_rename(struct diff_options *options)
 	struct diff_filespec *one, *two;
 	struct diff_score *m;
 
-	for (dst_cnt = i = 0; i < rename_dst_nr; i++) {
-		if (rename_dst[i].pair)
-			continue;
-
+	for (i = 0; i < dst_cnt; i++) {
 		for (j = 0; j < rename_src_nr; j++) {
-			m = &mx[dst_cnt * rename_src_nr + j];
+			m = &mx[i * rename_src_nr + j];
 
 			if (m->dst == -1)
 				continue;
 
-			one = rename_src[j].p->one;
-			two = rename_dst[i].two;
+			one = rename_src[m->src].p->one;
+			two = rename_dst[m->dst].two;
 
 			m->score = estimate_similarity(one, two, minimum_score);
 			m->name_score = basename_same(one, two);
@@ -583,8 +580,6 @@ void diffcore_rename(struct diff_options *options)
 			diff_free_filespec_blob(one);
 			diff_free_filespec_blob(two);
 		}
-
-		dst_cnt++;
 	}
 
 	stop_progress(&progress);
