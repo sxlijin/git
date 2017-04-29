@@ -441,6 +441,11 @@ static int find_renames(struct diff_score *mx, int dst_cnt, int minimum_score, i
 	return count;
 }
 
+struct calc_diff_score_thread_params {
+	struct diff_score *mx;
+	int i, j, dst_cnt, minimum_score;
+};
+
 void diffcore_rename(struct diff_options *options)
 {
 	int detect_rename = options->detect_rename;
@@ -559,12 +564,23 @@ void diffcore_rename(struct diff_options *options)
 		dst_cnt++;
 	}
 
+	struct calc_diff_score_thread_params x;
+	struct calc_diff_score_thread_params *p = &x;
+
+	p->mx = mx;
+	p->i = 0;
+	p->j = 0;
+	p->dst_cnt = dst_cnt;
+	p->minimum_score = minimum_score;
+
 	struct diff_filespec *one, *two;
 	struct diff_score *m;
+	//int i, j;
 
-	for (i = 0; i < dst_cnt; i++) {
-		for (j = 0; j < rename_src_nr; j++) {
-			m = &mx[i * rename_src_nr + j];
+	for (; p->i < p->dst_cnt; p->i++) {
+		p->j = 0;
+		for (; p->j < rename_src_nr; p->j++) {
+			m = &p->mx[p->i * rename_src_nr + p->j];
 
 			if (m->dst == -1)
 				continue;
