@@ -469,6 +469,8 @@ void threaded_calc_diff_scores(struct calc_diff_score_thread_params *p) {
 
 		p->j++;
 
+		pthread_mutex_unlock(&p->mutex);
+
 		if (m->dst > -1) {
 			one = rename_src[m->src].p->one;
 			two = rename_dst[m->dst].two;
@@ -487,7 +489,6 @@ void threaded_calc_diff_scores(struct calc_diff_score_thread_params *p) {
 			pthread_mutex_unlock(&one->mutex);
 			pthread_mutex_unlock(&two->mutex);
 		}
-		pthread_mutex_unlock(&p->mutex);
 	}
 }
 
