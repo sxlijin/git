@@ -446,6 +446,41 @@ struct calc_diff_score_thread_params {
 	int i, j, dst_cnt, minimum_score;
 };
 
+void threaded_calc_diff_scores(struct calc_diff_score_thread_params *p) {
+	struct diff_filespec *one, *two;
+	struct diff_score *m;
+	int i, j;
+
+	while (1) {
+		if (p->j == rename_src_nr) {
+			p->i++;
+			if (p->i == p->dst_cnt)
+				break;
+			p->j = 0;
+		}
+
+		j = p->j;
+		i = (p->i + j) % p->dst_cnt;
+		m = &p->mx[i * rename_src_nr + j];
+
+		p->j++;
+
+		if (m->dst == -1)
+			continue;
+
+		one = rename_src[m->src].p->one;
+		two = rename_dst[m->dst].two;
+
+		m->score = estimate_similarity(one, two, p->minimum_score);
+		m->name_score = basename_same(one, two);
+
+		// Once we run estimate_similarity,
+		// We do not need the text anymore.
+		diff_free_filespec_blob(one);
+		diff_free_filespec_blob(two);
+	}
+}
+
 void diffcore_rename(struct diff_options *options)
 {
 	int detect_rename = options->detect_rename;
@@ -564,47 +599,15 @@ void diffcore_rename(struct diff_options *options)
 		dst_cnt++;
 	}
 
-	struct calc_diff_score_thread_params x;
-	struct calc_diff_score_thread_params *p = &x;
+	struct calc_diff_score_thread_params params;
 
-	p->mx = mx;
-	p->i = 0;
-	p->j = 0;
-	p->dst_cnt = dst_cnt;
-	p->minimum_score = minimum_score;
+	params.mx = mx;
+	params.i = 0;
+	params.j = 0;
+	params.dst_cnt = dst_cnt;
+	params.minimum_score = minimum_score;
 
-	struct diff_filespec *one, *two;
-	struct diff_score *m;
-	//int i, j;
-
-	while (1) {
-		if (p->j == rename_src_nr) {
-			p->i++;
-			if (p->i == p->dst_cnt)
-				break;
-			p->j = 0;
-		}
-
-		j = p->j;
-		i = (p->i + j) % p->dst_cnt;
-		m = &p->mx[i * rename_src_nr + j];
-
-		p->j++;
-
-		if (m->dst == -1)
-			continue;
-
-		one = rename_src[m->src].p->one;
-		two = rename_dst[m->dst].two;
-
-		m->score = estimate_similarity(one, two, minimum_score);
-		m->name_score = basename_same(one, two);
-
-		// Once we run estimate_similarity,
-		// We do not need the text anymore.
-		diff_free_filespec_blob(one);
-		diff_free_filespec_blob(two);
-	}
+	threaded_calc_diff_scores(&params);
 
 	stop_progress(&progress);
 
