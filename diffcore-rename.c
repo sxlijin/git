@@ -580,7 +580,9 @@ void diffcore_rename(struct diff_options *options)
 	for (; p->i < p->dst_cnt; p->i++) {
 		p->j = 0;
 		for (; p->j < rename_src_nr; p->j++) {
-			m = &p->mx[p->i * rename_src_nr + p->j];
+			j = p->j;
+			i = (p->i + j) % p->dst_cnt;
+			m = &p->mx[i * rename_src_nr + j];
 
 			if (m->dst == -1)
 				continue;
