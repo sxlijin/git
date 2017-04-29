@@ -456,9 +456,11 @@ void threaded_calc_diff_scores(struct calc_diff_score_thread_params *p) {
 		pthread_mutex_lock(&p->mutex);
 		if (p->j == rename_src_nr) {
 			p->i++;
-			if (p->i == p->dst_cnt)
-				break;
 			p->j = 0;
+		}
+		if (p->i == p->dst_cnt) {
+			pthread_mutex_unlock(&p->mutex);
+			break;
 		}
 
 		j = p->j;
@@ -467,29 +469,25 @@ void threaded_calc_diff_scores(struct calc_diff_score_thread_params *p) {
 
 		p->j++;
 
-		// want to put this after the continue but then you have an issue of
-		// re-acquiring p->mutex
+		if (m->dst > -1) {
+			one = rename_src[m->src].p->one;
+			two = rename_dst[m->dst].two;
+
+			pthread_mutex_lock(&one->mutex);
+			pthread_mutex_lock(&two->mutex);
+
+			m->score = estimate_similarity(one, two, p->minimum_score);
+			m->name_score = basename_same(one, two);
+
+			// Once we run estimate_similarity, we don't need the text anymore
+			// since it lazy-loads diff_filespec->cnt_data.
+			diff_free_filespec_blob(one);
+			diff_free_filespec_blob(two);
+
+			pthread_mutex_unlock(&one->mutex);
+			pthread_mutex_unlock(&two->mutex);
+		}
 		pthread_mutex_unlock(&p->mutex);
-
-		if (m->dst == -1)
-			continue;
-
-		one = rename_src[m->src].p->one;
-		two = rename_dst[m->dst].two;
-
-		pthread_mutex_lock(&one->mutex);
-		pthread_mutex_lock(&two->mutex);
-
-		m->score = estimate_similarity(one, two, p->minimum_score);
-		m->name_score = basename_same(one, two);
-
-		// Once we run estimate_similarity,
-		// We do not need the text anymore.
-		diff_free_filespec_blob(one);
-		diff_free_filespec_blob(two);
-
-		pthread_mutex_unlock(&one->mutex);
-		pthread_mutex_unlock(&two->mutex);
 	}
 }
 
@@ -589,6 +587,8 @@ void diffcore_rename(struct diff_options *options)
 				rename_dst_nr * rename_src_nr, 50, 1);
 	}
 
+	// initialize the diff_score matrix with all information
+	// needed to compute all diff_scores
 	mx = xcalloc(st_mult(rename_src_nr, num_create), sizeof(*mx));
 	for (dst_cnt = i = 0; i < rename_dst_nr; i++) {
 		struct diff_score *m;
@@ -613,7 +613,6 @@ void diffcore_rename(struct diff_options *options)
 
 	for (i = 0; i < rename_src_nr; i++)
 		pthread_mutex_init(&rename_src[i].p->one->mutex, NULL);
-
 	for (i = 0; i < rename_dst_nr; i++)
 		pthread_mutex_init(&rename_dst[i].two->mutex, NULL);
 
@@ -626,7 +625,25 @@ void diffcore_rename(struct diff_options *options)
 	params.dst_cnt = dst_cnt;
 	params.minimum_score = minimum_score;
 
-	threaded_calc_diff_scores(&params);
+	int t, rename_thread_nr = online_cpus();
+
+	pthread_t *rename_threads = xcalloc(rename_thread_nr, sizeof(pthread_t));
+
+	// compute the diff_scores, treating mx as a concurrent queue
+	for (t = 0; t < rename_thread_nr; t++)
+		pthread_create(&rename_threads[t], NULL,
+			(void * (*)(void *)) threaded_calc_diff_scores, (void *) &params);
+
+	for (t = 0; t < rename_thread_nr; t++)
+		pthread_join(rename_threads[t], NULL);
+
+	free(rename_threads);
+
+	for (i = 0; i < rename_src_nr; i++)
+		pthread_mutex_destroy(&rename_src[i].p->one->mutex);
+	for (i = 0; i < rename_dst_nr; i++)
+		pthread_mutex_destroy(&rename_dst[i].two->mutex);
+	pthread_mutex_destroy(&params.mutex);
 
 	stop_progress(&progress);
 
