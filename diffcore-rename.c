@@ -450,7 +450,7 @@ struct calc_diff_score_thread_params {
 void threaded_calc_diff_scores(struct calc_diff_score_thread_params *p) {
 	struct diff_filespec *one, *two;
 	struct diff_score *m;
-	int i, j;
+	int i, j, one_data;
 
 	while (1) {
 		pthread_mutex_lock(&p->mutex);
@@ -478,17 +478,22 @@ void threaded_calc_diff_scores(struct calc_diff_score_thread_params *p) {
 
 			one = rename_src[m->src].p->one;
 
-			pthread_mutex_lock(&one->mutex);
+			one_data = one->cnt_data ? 1 : 0;
+
+			if (!one_data)
+				pthread_mutex_lock(&one->mutex);
 
 			m->score = estimate_similarity(one, two, p->minimum_score);
 			m->name_score = basename_same(one, two);
 
 			// Once we run estimate_similarity, we don't need the text anymore
 			// since it lazy-loads diff_filespec->cnt_data.
-			diff_free_filespec_blob(one);
+			if (!one_data)
+				diff_free_filespec_blob(one);
 			diff_free_filespec_blob(two);
 
-			pthread_mutex_unlock(&one->mutex);
+			if (!one_data)
+				pthread_mutex_unlock(&one->mutex);
 		}
 
 		pthread_mutex_unlock(&two->mutex);
