@@ -454,29 +454,31 @@ void threaded_calc_diff_scores(struct calc_diff_score_thread_params *p) {
 
 	while (1) {
 		pthread_mutex_lock(&p->mutex);
-		if (p->j == rename_src_nr) {
-			p->i++;
-			p->j = 0;
-		}
+
 		if (p->i == p->dst_cnt) {
 			pthread_mutex_unlock(&p->mutex);
 			break;
 		}
 
-		j = p->j;
-		i = (p->i + j) % p->dst_cnt;
-		m = &p->mx[i * rename_src_nr + j];
-
-		p->j++;
+		i = p->i;
+		p->i++;
 
 		pthread_mutex_unlock(&p->mutex);
 
-		if (m->dst > -1) {
+		two = rename_dst[p->mx[i * rename_src_nr].dst].two;
+		pthread_mutex_lock(&two->mutex);
+
+		for (j = 0; j < rename_src_nr; j++) {
+			m = &p->mx[i * rename_src_nr + j];
+
+			p->j++;
+
+			if (m->dst == -1)
+				continue;
+
 			one = rename_src[m->src].p->one;
-			two = rename_dst[m->dst].two;
 
 			pthread_mutex_lock(&one->mutex);
-			pthread_mutex_lock(&two->mutex);
 
 			m->score = estimate_similarity(one, two, p->minimum_score);
 			m->name_score = basename_same(one, two);
@@ -487,8 +489,9 @@ void threaded_calc_diff_scores(struct calc_diff_score_thread_params *p) {
 			diff_free_filespec_blob(two);
 
 			pthread_mutex_unlock(&one->mutex);
-			pthread_mutex_unlock(&two->mutex);
 		}
+
+		pthread_mutex_unlock(&two->mutex);
 	}
 }
 
