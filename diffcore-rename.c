@@ -465,7 +465,14 @@ void threaded_calc_diff_scores(struct calc_diff_score_thread_params *p) {
 
 		pthread_mutex_unlock(&p->mutex);
 
-		two = rename_dst[p->mx[i * rename_src_nr].dst].two;
+		// only enter the loop if any work whatsoever will be done
+		for (j = 0; j < rename_src_nr; j++)
+			if (p->mx[i * rename_src_nr + j].dst > -1)
+				break;
+		if (j == rename_src_nr)
+			continue;
+		two = rename_dst[p->mx[i * rename_src_nr + j].dst].two;
+
 		pthread_mutex_lock(&two->mutex);
 
 		for (j = 0; j < rename_src_nr; j++) {
