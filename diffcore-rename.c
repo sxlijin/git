@@ -612,10 +612,17 @@ void diffcore_rename(struct diff_options *options)
 		dst_cnt++;
 	}
 
-	for (i = 0; i < rename_src_nr; i++)
-		pthread_mutex_init(&rename_src[i].p->one->mutex, NULL);
-	for (i = 0; i < rename_dst_nr; i++)
-		pthread_mutex_init(&rename_dst[i].two->mutex, NULL);
+	struct diff_filespec *fspec;
+	for (i = 0; i < rename_src_nr; i++) {
+		fspec = rename_src[i].p->one;
+		pthread_mutex_init(&fspec->mutex, NULL);
+		diff_filespec_is_binary(fspec);
+	}
+	for (i = 0; i < rename_dst_nr; i++) {
+		fspec = rename_dst[i].two;
+		pthread_mutex_init(&fspec->mutex, NULL);
+		diff_filespec_is_binary(fspec);
+	}
 
 	struct calc_diff_score_thread_params params;
 
