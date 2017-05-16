@@ -56,6 +56,14 @@ matrix:
       before_install:
       script: ci/run-static-analysis.sh
       after_failure:
+    - env: Clang Static Analysis
+      os: linux
+      addons:
+        apt:
+          packages:
+            - clang
+      before_script:
+      script: scan-build -o scan-build-output make --jobs=2
     - env: jobname=Documentation
       os: linux
       compiler:
