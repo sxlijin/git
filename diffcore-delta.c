@@ -162,6 +162,20 @@ static struct spanhash_top *hash_chars(struct diff_filespec *one)
 	return hash;
 }
 
+void diffcore_count_single(struct diff_filespec *f,
+		void **count_p)
+{
+	struct spanhash_top *count;
+	count = NULL;
+	if (count_p)
+		count = *count_p;
+	if (!count) {
+		count = hash_chars(f);
+		if (count_p)
+			*count_p = count;
+	}
+}
+
 int diffcore_count_changes(struct diff_filespec *src,
 			   struct diff_filespec *dst,
 			   void **src_count_p,
