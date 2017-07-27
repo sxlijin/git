@@ -424,7 +424,7 @@ static int find_renames(struct diff_score *mx, int dst_cnt, int minimum_score, i
 {
 	int count = 0, i;
 
-	for (i = 0; i < dst_cnt * NUM_CANDIDATE_PER_DST; i++) {
+	for (i = 0; i < dst_cnt * rename_src_nr; i++) {
 		struct diff_rename_dst *dst;
 
 		if ((mx[i].dst < 0) ||
@@ -439,6 +439,29 @@ static int find_renames(struct diff_score *mx, int dst_cnt, int minimum_score, i
 		count++;
 	}
 	return count;
+}
+
+struct load_cnt_data_thread_params {
+	int src, dst;
+};
+
+static void threaded_load_cnt_data(struct load_cnt_data_thread_params *p) {
+	struct diff_filespec *f;
+
+	if (p->dst == -1) {
+		// load cnt_data for a diff_rename_src
+		f = rename_src[p->src].p->one;
+	}
+	else {
+		// load cnt_data for a diff_rename_dst
+		f = rename_dst[p->dst].two;
+	}
+
+	// what to do with the values returned by these methods?
+	if (!f->cnt_data)
+		diff_populate_filespec(f, 0);
+	if (!f->cnt_data)
+		diffcore_count_single(f, &f->cnt_data);
 }
 
 void diffcore_rename(struct diff_options *options)
@@ -537,7 +560,44 @@ void diffcore_rename(struct diff_options *options)
 				rename_dst_nr * rename_src_nr, 50, 1);
 	}
 
-	mx = xcalloc(st_mult(NUM_CANDIDATE_PER_DST, num_create), sizeof(*mx));
+	for (i = 0; i < rename_src_nr + rename_dst_nr; i++) {
+		struct load_cnt_data_thread_params p;
+
+		if (i < rename_src_nr) { // breaks t5000-#55
+			p.src = i;
+			p.dst = -1;
+
+			if (skip_unmodified &&
+			    diff_unmodified_pair(rename_src[p.src].p))
+				continue;
+
+			diff_populate_filespec(rename_src[p.src].p->one, 0);
+		}
+		else { // breaks t5000-#52
+			p.src = -1;
+			p.dst = i - rename_src_nr;
+
+			if (rename_dst[p.dst].pair)
+				continue;
+		}
+
+		threaded_load_cnt_data(&p);
+	}
+
+	mx = xcalloc(st_mult(rename_src_nr, num_create), sizeof(*mx));
+
+	// this pre-loads all the information that estimate_similarity has
+	// historically lazy-loaded
+	//
+	// for every src and dst diff_filespec,
+	//      diff_populate_filespec()
+	// for every src and dst diff_filespec,
+	//      diffcore-delta.c:hash_chars()
+	// for every src and dst diff_filespec,
+	//      diff_free_filespec_blob()
+	//
+	// and now there's no need to lock the filespecs when we thread the calls
+	// to estimate_similarity()
 	for (dst_cnt = i = 0; i < rename_dst_nr; i++) {
 		struct diff_filespec *two = rename_dst[i].two;
 		struct diff_score *m;
@@ -545,8 +605,8 @@ void diffcore_rename(struct diff_options *options)
 		if (rename_dst[i].pair)
 			continue; /* dealt with exact match already. */
 
-		m = &mx[dst_cnt * NUM_CANDIDATE_PER_DST];
-		for (j = 0; j < NUM_CANDIDATE_PER_DST; j++)
+		m = &mx[dst_cnt * rename_src_nr];
+		for (j = 0; j < rename_src_nr; j++)
 			m[j].dst = -1;
 
 		for (j = 0; j < rename_src_nr; j++) {
@@ -562,7 +622,9 @@ void diffcore_rename(struct diff_options *options)
 			this_src.name_score = basename_same(one, two);
 			this_src.dst = i;
 			this_src.src = j;
-			record_if_better(m, &this_src);
+
+			m[j] = this_src;
+
 			/*
 			 * Once we run estimate_similarity,
 			 * We do not need the text anymore.
@@ -576,7 +638,7 @@ void diffcore_rename(struct diff_options *options)
 	stop_progress(&progress);
 
 	/* cost matrix sorted by most to least similar pair */
-	QSORT(mx, dst_cnt * NUM_CANDIDATE_PER_DST, score_compare);
+	QSORT(mx, dst_cnt * rename_src_nr, score_compare);
 
 	rename_count += find_renames(mx, dst_cnt, minimum_score, 0);
 	if (detect_rename == DIFF_DETECT_COPY)
